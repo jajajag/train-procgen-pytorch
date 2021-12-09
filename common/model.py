@@ -1,4 +1,5 @@
 from .misc_util import orthogonal_init, xavier_uniform_init
+from .cnsn import CrossNorm, SelfNorm, CNSN
 import torch.nn as nn
 import torch
 
@@ -64,25 +65,72 @@ class NatureModel(nn.Module):
 
 
 class ResidualBlock(nn.Module):
-    def __init__(self,
-                 in_channels):
+    def __init__(self, in_channels,
+                 pos, beta, crop, cnsn_type):
         super(ResidualBlock, self).__init__()
-        self.conv1 = nn.Conv2d(in_channels=in_channels, out_channels=in_channels, kernel_size=3, stride=1, padding=1)
-        self.conv2 = nn.Conv2d(in_channels=in_channels, out_channels=in_channels, kernel_size=3, stride=1, padding=1)
+        self.conv1 = nn.Conv2d(
+                in_channels=in_channels, out_channels=in_channels,
+                kernel_size=3, stride=1, padding=1)
+        self.conv2 = nn.Conv2d(
+                in_channels=in_channels, out_channels=in_channels,
+                kernel_size=3, stride=1, padding=1)
+
+        # JAG: Initialization for crossnorm and selfnorm
+        assert cnsn_type in ['', 'sn', 'cn', 'cnsn']
+        crossnorm, selfnorm = None, None
+        
+        if 'cn' in cnsn_type:
+            crossnorm = CrossNorm(crop=crop, beta=beta)
+
+        if 'sn' in cnsn_type:
+            # Here we have in_channels == out_channels
+            # No need to worry about self.is_in_equal_out
+            selfnorm = SelfNorm(in_channels)
+
+        self.cnsn = CNSN(crossnorm=crossnorm, selfnorm=selfnorm)
+
+        # Assign pos parameter
+        assert pos in ['residual', 'identity', 'pre', 'post']
+        self.pos = pos
 
     def forward(self, x):
-        out = nn.ReLU()(x)
+        # JAG: We add cnsn here in the ResidualBlock
+        # 1. If the position is pre, do cnsn to x
+        out = x
+        if self.pos == 'pre':
+            out = self.cnsn(out)
+
+        out = nn.ReLU()(out)
         out = self.conv1(out)
         out = nn.ReLU()(out)
         out = self.conv2(out)
-        return out + x
+
+        # 2. If the position is residual, do cnsn to out
+        if self.pos == 'residual':
+            out = self.cnsn(out)
+        # 3. If the position is identity, do cnsn to x
+        elif self.pos == 'identity':
+            x = self.cnsn(x)
+
+        out = torch.add(out, x)
+
+        # 4. If the position is post, do cnsn to out + x
+        if self.pos == 'post':
+            return self.cnsn(out)
+        return out
 
 class ImpalaBlock(nn.Module):
-    def __init__(self, in_channels, out_channels):
+    def __init__(self, in_channels, out_channels,
+                 pos, beta, crop, cnsn_type):
         super(ImpalaBlock, self).__init__()
-        self.conv = nn.Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=3, stride=1, padding=1)
-        self.res1 = ResidualBlock(out_channels)
-        self.res2 = ResidualBlock(out_channels)
+        self.conv = nn.Conv2d(
+                in_channels=in_channels, out_channels=out_channels,
+                kernel_size=3, stride=1, padding=1)
+        # JAG: Pass parameters to ResidualBlock
+        self.res1 = ResidualBlock(out_channels,
+                pos=pos, beta=beta, crop=crop, cnsn_type=cnsn_type)
+        self.res2 = ResidualBlock(out_channels,
+                pos=pos, beta=beta, crop=crop, cnsn_type=cnsn_type)
 
     def forward(self, x):
         x = self.conv(x)
@@ -92,13 +140,19 @@ class ImpalaBlock(nn.Module):
         return x
 
 class ImpalaModel(nn.Module):
-    def __init__(self,
-                 in_channels,
+    def __init__(self, in_channels,
+                 pos='post', beta=1, crop='neither', cnsn_type='',
                  **kwargs):
         super(ImpalaModel, self).__init__()
-        self.block1 = ImpalaBlock(in_channels=in_channels, out_channels=16)
-        self.block2 = ImpalaBlock(in_channels=16, out_channels=32)
-        self.block3 = ImpalaBlock(in_channels=32, out_channels=32)
+        self.block1 = ImpalaBlock(
+                in_channels=in_channels, out_channels=16, 
+                pos=pos, beta=beta, crop=crop, cnsn_type=cnsn_type)
+        self.block2 = ImpalaBlock(
+                in_channels=16, out_channels=32,
+                pos=pos, beta=beta, crop=crop, cnsn_type=cnsn_type)
+        self.block3 = ImpalaBlock(
+                in_channels=32, out_channels=32,
+                pos=pos, beta=beta, crop=crop, cnsn_type=cnsn_type)
         self.fc = nn.Linear(in_features=32 * 8 * 8, out_features=256)
 
         self.output_dim = 256
