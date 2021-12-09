@@ -20,9 +20,9 @@ if __name__=='__main__':
             help='environment ID')
     parser.add_argument('--start_level',      type=int, default = int(0),
             help='start-level for environment')
-    parser.add_argument('--num_levels',       type=int, default = int(0),
+    parser.add_argument('--num_levels',       type=int, default = int(500),
             help='number of training levels for environment')
-    parser.add_argument('--distribution_mode',type=str, default = 'easy',
+    parser.add_argument('--distribution_mode',type=str, default = 'hard',
             help='distribution mode for environment')
     parser.add_argument('--param_name',       type=str, default = 'easy-200',
             help='hyper-parameter ID')
@@ -32,7 +32,9 @@ if __name__=='__main__':
     parser.add_argument('--gpu_device',       type=int, default = int(0),
             required = False,
             help = 'visible device in CUDA')
-    parser.add_argument('--num_timesteps',    type=int, default = int(25000000),
+    parser.add_argument('--num_timesteps',    type=int,
+            # Easy for 25M timesteps, Hard for 200M timesteps
+            default = int(200000000),
             help = 'number of training timesteps')
     parser.add_argument('--seed',             type=int,
             default = random.randint(0,9999),
