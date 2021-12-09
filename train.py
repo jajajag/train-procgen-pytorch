@@ -53,6 +53,8 @@ if __name__=='__main__':
     parser.add_argument('--crop',             type=str, default = 'neither',
             choices = ['neither', 'style', 'content', 'both'],
             help='CNSN: if we do crop to style or content')
+    parser.add_argument('--eval_env',             type=bool, default = True,
+            help='use evaluation environment or not')
 
     args = parser.parse_args()
     exp_name = args.exp_name
@@ -109,9 +111,26 @@ if __name__=='__main__':
     normalize_rew = hyperparameters.get('normalize_rew', True)
     env = VecExtractDictObs(env, "rgb")
     if normalize_rew:
-        env = VecNormalize(env, ob=False) # normalizing returns, but not the img frames.
+        # normalizing returns, but not the img frames.
+        env = VecNormalize(env, ob=False)
     env = TransposeFrame(env)
     env = ScaledFloatFrame(env)
+
+    # JAG: If we use eval_env
+    eval_env = None
+    if args.eval_env:
+        eval_env = ProcgenEnv(
+                num_envs=n_envs, env_name=env_name,
+                # We do not limit num_levels for eval_env
+                start_level=start_level, num_levels=0,
+                distribution_mode=distribution_mode)
+        normalize_rew = hyperparameters.get('normalize_rew', True)
+        eval_env = VecExtractDictObs(eval_env, "rgb")
+        if normalize_rew:
+            # normalizing returns, but not the img frames.
+            eval_env = VecNormalize(eval_env, ob=False)
+        eval_env = TransposeFrame(eval_env)
+        eval_env = ScaledFloatFrame(eval_env)
 
     ############
     ## LOGGER ##
@@ -155,7 +174,8 @@ if __name__=='__main__':
     #############
     print('INITIALIZAING STORAGE...')
     hidden_state_dim = model.output_dim
-    storage = Storage(observation_shape, hidden_state_dim, n_steps, n_envs, device)
+    storage = Storage(
+            observation_shape, hidden_state_dim, n_steps, n_envs, device)
 
     ###########
     ## AGENT ##
@@ -166,7 +186,8 @@ if __name__=='__main__':
         from agents.ppo import PPO as AGENT
     else:
         raise NotImplementedError
-    agent = AGENT(env, policy, logger, storage, device, num_checkpoints, **hyperparameters)
+    agent = AGENT(env, policy, logger, storage, device, num_checkpoints, 
+            eval_env=eval_env, **hyperparameters)
 
     ##############
     ## TRAINING ##
