@@ -143,7 +143,8 @@ if __name__=='__main__':
     logdir = os.path.join('logs', logdir)
     if not (os.path.exists(logdir)):
         os.makedirs(logdir)
-    logger = Logger(n_envs, logdir)
+    # JAG: Add eval env
+    logger = Logger(n_envs, logdir, args.eval_env)
 
     ###########
     ## MODEL ##

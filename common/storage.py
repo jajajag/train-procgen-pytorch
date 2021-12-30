@@ -14,8 +14,10 @@ class Storage():
         self.reset()
 
     def reset(self):
-        self.obs_batch = torch.zeros(self.num_steps+1, self.num_envs, *self.obs_shape)
-        self.hidden_states_batch = torch.zeros(self.num_steps+1, self.num_envs, self.hidden_state_size)
+        self.obs_batch = torch.zeros(
+                self.num_steps+1, self.num_envs, *self.obs_shape)
+        self.hidden_states_batch = torch.zeros(
+                self.num_steps+1, self.num_envs, self.hidden_state_size)
         self.act_batch = torch.zeros(self.num_steps, self.num_envs)
         self.rew_batch = torch.zeros(self.num_steps, self.num_envs)
         self.done_batch = torch.zeros(self.num_steps, self.num_envs)
@@ -28,7 +30,8 @@ class Storage():
 
     def store(self, obs, hidden_state, act, rew, done, info, log_prob_act, value):
         self.obs_batch[self.step] = torch.from_numpy(obs.copy())
-        self.hidden_states_batch[self.step] = torch.from_numpy(hidden_state.copy())
+        self.hidden_states_batch[self.step] = torch.from_numpy(
+                hidden_state.copy())
         self.act_batch[self.step] = torch.from_numpy(act.copy())
         self.rew_batch[self.step] = torch.from_numpy(rew.copy())
         self.done_batch[self.step] = torch.from_numpy(done.copy())
@@ -40,7 +43,8 @@ class Storage():
 
     def store_last(self, last_obs, last_hidden_state, last_value):
         self.obs_batch[-1] = torch.from_numpy(last_obs.copy())
-        self.hidden_states_batch[-1] = torch.from_numpy(last_hidden_state.copy())
+        self.hidden_states_batch[-1] = torch.from_numpy(
+                last_hidden_state.copy())
         self.value_batch[-1] = torch.from_numpy(last_value.copy())
 
     def compute_estimates(self, gamma=0.99, lmbda=0.95, use_gae=True, normalize_adv=True):
@@ -85,8 +89,10 @@ class Storage():
                 done_batch = torch.FloatTensor(self.done_batch).reshape(-1)[indices].to(self.device)
                 log_prob_act_batch = torch.FloatTensor(self.log_prob_act_batch).reshape(-1)[indices].to(self.device)
                 value_batch = torch.FloatTensor(self.value_batch[:-1]).reshape(-1)[indices].to(self.device)
-                return_batch = torch.FloatTensor(self.return_batch).reshape(-1)[indices].to(self.device)
-                adv_batch = torch.FloatTensor(self.adv_batch).reshape(-1)[indices].to(self.device)
+                return_batch = torch.FloatTensor(
+                        self.return_batch).reshape(-1)[indices].to(self.device)
+                adv_batch = torch.FloatTensor(
+                        self.adv_batch).reshape(-1)[indices].to(self.device)
                 yield obs_batch, hidden_state_batch, act_batch, done_batch, log_prob_act_batch, value_batch, return_batch, adv_batch
         # If agent's policy is recurrent, data should be sampled along the time-horizon
         else:

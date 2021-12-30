@@ -54,6 +54,7 @@ class PPO(BaseAgent):
         self.use_gae = use_gae
         # JAG: Initialize eval_env
         self.eval_env = eval_env
+        self.eval_episode_rewards = [[] for i in range(self.n_steps)]
 
     def predict(self, obs, hidden_state, done):
         with torch.no_grad():
@@ -134,6 +135,12 @@ class PPO(BaseAgent):
         obs = self.env.reset()
         hidden_state = np.zeros((self.n_envs, self.storage.hidden_state_size))
         done = np.zeros(self.n_envs)
+        # JAG: Eval Env
+        if self.eval_env:
+            eval_obs = self.eval_env.reset()
+            eval_hidden_state = np.zeros(
+                    (self.n_envs, self.storage.hidden_state_size))
+            eval_done = np.zeros(self.n_envs)
 
         while self.t < num_timesteps:
             # Run Policy
@@ -146,9 +153,26 @@ class PPO(BaseAgent):
                         log_prob_act, value)
                 obs = next_obs
                 hidden_state = next_hidden_state
+            # JAG: Eval Env loop
+            if self.eval_env:
+                eval_rew_batch, eval_done_batch = [], []
+                for _ in range(self.n_steps):
+                    eval_act, eval_log_prob_act, eval_value, \
+                            eval_next_hidden_state = self.predict(
+                                    eval_obs, eval_hidden_state, eval_done)
+                    eval_next_obs, eval_rew, eval_done, \
+                            eval_info = self.eval_env.step(eval_act)
+                    eval_obs = next_obs
+                    # Append rewards and dones to the batch
+                    eval_rew_batch.append(eval_rew)
+                    eval_done_batch.append(eval_done)
 
             _, _, last_val, hidden_state = self.predict(obs, hidden_state, done)
             self.storage.store_last(obs, hidden_state, last_val)
+            # JAG: Eval Env last
+            if self.eval_env:
+                _, _, eval_last_val, eval_hidden_state = self.predict(
+                        obs, hidden_state, done)
 
             # Compute advantage estimates
             self.storage.compute_estimates(
@@ -160,6 +184,9 @@ class PPO(BaseAgent):
             self.t += self.n_steps * self.n_envs
             rew_batch, done_batch = self.storage.fetch_log_data()
             self.logger.feed(rew_batch, done_batch)
+            # JAG: Feed eval env to the logger
+            if self.eval_env:
+                self.logger.feed_eval(eval_rew_batch, eval_done_batch)
             self.logger.write_summary(summary)
             self.logger.dump()
 
@@ -171,3 +198,4 @@ class PPO(BaseAgent):
                         self.logger.logdir + '/model_' + str(self.t) + '.pth')
                 checkpoint_cnt += 1
         self.env.close()
+
